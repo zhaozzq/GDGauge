@@ -10,6 +10,7 @@ import UIKit
 public final class GaugeView: UIView {
     // MARK: - Private properties
     private var containerShape: CAShapeLayer!
+    private var progressShape: CAShapeLayer!
     private var handleShape: CAShapeLayer!
     private var displayLink: CADisplayLink?
     private var absStartTime: CFAbsoluteTime?
@@ -214,8 +215,13 @@ public final class GaugeView: UIView {
         if showContainerBorder || options.contains(.showContainerBorder) {
             drawContainerShape()
         }
+        drawProgressShape()
         drawHandleShape()
         drawIndicators()
+        
+        absStartTime = CFAbsoluteTimeGetCurrent()
+        displayLink = CADisplayLink(target: self, selector: #selector(updateUI(_:)))
+        displayLink?.add(to: RunLoop.main, forMode: RunLoop.Mode.common)
     }
 
     // MARK: - Update UI
@@ -267,7 +273,32 @@ public final class GaugeView: UIView {
         currentValue = value
     }
     
-    @objc private func updateHandle(_ sender: CADisplayLink) {
+    @objc private func updateUI(_ sender: CADisplayLink) {
+        updateProgress()
+        updateHandle()
+    }
+
+    private func updateProgress() {
+        //let startDegree: CGFloat = 360.0 - calculations.calculatedEndDegree + 2
+        //let endDegree: CGFloat = 360.0 - calculations.getNewPosition(currentValue)
+        
+        var startDegree: CGFloat = 360.0 - calculations.getNewPosition(currentValue)
+        var endDegree: CGFloat = 360.0 - calculations.calculatedStartDegree
+        if currentValue >= maxValue {
+            startDegree = startDegree + 2
+        }
+        if currentValue > 0 {
+            endDegree = endDegree - 2
+        }
+        let containerPath = UIBezierPath(arcCenter: CGPoint(x: frame.width / 2, y: frame.height / 2),
+                                         radius: (frame.width / 3),
+                                         startAngle: startDegree.radian,
+                                         endAngle: endDegree.radian, clockwise: false).cgPath
+        
+        progressShape?.path = containerPath
+    }
+    
+    private func updateHandle() {
         let newPositionAngle = calculations
             .getNewPosition(currentValue)
             .radian
@@ -284,10 +315,10 @@ public final class GaugeView: UIView {
         let centerPoint = CGPoint(x: frame.width / 2, y: frame.height / 2)
         let endPoint = CGPoint(x: cos(-newPositionAngle) * endVal + centerPoint.x,
                                y: sin(-newPositionAngle) * endVal + centerPoint.y)
-        let rightPoint = CGPoint(x: cos(-leftAngle) * CGFloat(15) + centerPoint.x,
-                                 y: sin(-leftAngle) * CGFloat(15) + centerPoint.y)
-        let leftPoint = CGPoint(x: cos(-rightAngle) * CGFloat(15) + centerPoint.x,
-                                y: sin(-rightAngle) * CGFloat(15) + centerPoint.y)
+        let rightPoint = CGPoint(x: cos(-leftAngle) * CGFloat(5) + centerPoint.x,
+                                 y: sin(-leftAngle) * CGFloat(5) + centerPoint.y)
+        let leftPoint = CGPoint(x: cos(-rightAngle) * CGFloat(5) + centerPoint.x,
+                                y: sin(-rightAngle) * CGFloat(5) + centerPoint.y)
         
         let handlePath = UIBezierPath()
         handlePath.move(to: rightPoint)
@@ -298,8 +329,8 @@ public final class GaugeView: UIView {
         let diffy = midy - rightPoint.y
         let angle = (atan2(diffy, diffx) * CGFloat((180 / Double.pi))) - 90
         let targetRad = angle.radian
-        let newX = midx - 20 * cos(targetRad)
-        let newY = midy - 20 * sin(targetRad)
+        let newX = midx - 10 * cos(targetRad)
+        let newY = midy - 10 * sin(targetRad)
         
         handlePath.addQuadCurve(to: leftPoint, controlPoint: CGPoint(x: newX, y: newY))
         handlePath.addLine(to: endPoint)
@@ -310,8 +341,8 @@ public final class GaugeView: UIView {
     
     // MARK: - Draw Gauge
     private func drawContainerShape() {
-        let startDegree: CGFloat = 360.0 - calculations.calculatedEndDegree
-        let endDegree: CGFloat = 360.0 - calculations.calculatedStartDegree
+        let startDegree: CGFloat = 360.0 - calculations.calculatedEndDegree + 2
+        let endDegree: CGFloat = 360.0 - calculations.calculatedStartDegree - 2
         
         containerShape = CAShapeLayer()
         containerShape.fillColor = nil
@@ -334,63 +365,37 @@ public final class GaugeView: UIView {
         layer.addSublayer(containerShape)
     }
     
+    private func drawProgressShape() {
+        let startDegree: CGFloat = 360.0 - calculations.calculatedEndDegree + 2
+        let endDegree: CGFloat = 360.0 - calculations.getNewPosition(currentValue)
+        
+        progressShape = CAShapeLayer()
+        progressShape.fillColor = nil
+        progressShape.strokeColor = UIColor(red: 141/255.0, green: 238/255.0, blue: 69/255.0, alpha: 1).cgColor
+        progressShape.lineWidth = containerBorderWidth
+        
+        var containerPath = UIBezierPath(arcCenter: CGPoint(x: frame.width / 2, y: frame.height / 2),
+                                         radius: (frame.width / 3),
+                                         startAngle: startDegree.radian,
+                                         endAngle: endDegree.radian, clockwise: false).cgPath
+        
+        progressShape?.path = containerPath
+        layer.addSublayer(progressShape)
+    }
+    
     private func drawHandleShape() {
         handleShape = CAShapeLayer()
         handleShape.fillColor = handleColor.cgColor
-        
-        let baseDegree = calculations
-            .getNewPosition(currentValue)
-            .radian
-        let leftAngle = calculations
-            .getNewPosition(currentValue, diff: 90)
-            .radian
-
-        let rightAngle = calculations
-            .getNewPosition(currentValue, diff: -90)
-            .radian
-
-        let startVal = frame.width / 4
-        let length = CGFloat(5)
-        let endVal = startVal + length
         let centerPoint = CGPoint(x: frame.width / 2, y: frame.height / 2)
-        let endPoint = CGPoint(x: cos(-baseDegree) * endVal + centerPoint.x,
-                               y: sin(-baseDegree) * endVal + centerPoint.y)
-        let rightPoint = CGPoint(x: cos(-leftAngle) * CGFloat(15) + centerPoint.x,
-                                 y: sin(-leftAngle) * CGFloat(15) + centerPoint.y)
-        let leftPoint = CGPoint(x: cos(-rightAngle) * CGFloat(15) + centerPoint.x,
-                                y: sin(-rightAngle) * CGFloat(15) + centerPoint.y)
-        
-        let handlePath = UIBezierPath()
-        handlePath.move(to: rightPoint)
-        
-        let midx = rightPoint.x + ((leftPoint.x - rightPoint.x) / 2)
-        let midy = rightPoint.y + ((leftPoint.y - rightPoint.y) / 2)
-        let diffx = midx - rightPoint.x
-        let diffy = midy - rightPoint.y
-        let angle = (atan2(diffy, diffx) * CGFloat((180 / Double.pi))) - 90
-        let targetRad = angle.radian
-        let newX = midx - 20 * cos(targetRad)
-        let newY = midy - 20 * sin(targetRad)
-        
-        handlePath.addQuadCurve(to: leftPoint, controlPoint: CGPoint(x: newX, y: newY))
-        handlePath.addLine(to: endPoint)
-        handlePath.addLine(to: rightPoint)
-        
-        handleShape.path = handlePath.cgPath
         handleShape.anchorPoint = centerPoint
-        handleShape.path = handlePath.cgPath
         layer.addSublayer(handleShape)
-        
-        absStartTime = CFAbsoluteTimeGetCurrent()
-        displayLink = CADisplayLink(target: self, selector: #selector(updateHandle(_:)))
-        displayLink?.add(to: RunLoop.main, forMode: RunLoop.Mode.common)
     }
     
     private func drawIndicators() {
         let center = CGPoint(x: frame.width / 2, y: frame.height / 2)
         
         addInnerIndicators(centerPoint: center)
-        addOuterIndicators(centerPoint: center)
+        //addOuterIndicators(centerPoint: center)
         addTextLabels(centerPoint: center)
         addUnitIndicator(centerPoint: center)
     }
@@ -400,10 +405,10 @@ public final class GaugeView: UIView {
             let indicatorLayer = CAShapeLayer()
             indicatorLayer.frame = bounds
             
-            let indicWidth = CGFloat(3)
-            let indicLength = CGFloat(8)
+            let indicWidth = CGFloat(5)
+            let indicLength = CGFloat(12)
             
-            let startValue = (frame.width / 3) * 0.95
+            let startValue = (frame.width / 3) - containerBorderWidth - indicLength
             let endValue = startValue + indicLength
             let baseAngle = calculations
                 .calculateDegree(for: CGFloat(i))
@@ -485,11 +490,11 @@ public final class GaugeView: UIView {
             } else {
                 indicatorStringValue = String(Double(indicatorValue))
             }
-            let size: CGSize = textSize(for: indicatorStringValue, font: indicatorsFont)
+            let size: CGSize = textSize(for: indicatorStringValue, font: unitTitleFont)
             
             let xOffset = abs(cos(baseRad)) * size.width * 0.5
             let yOffset = abs(sin(baseRad)) * size.height * 0.5
-            let textPadding = CGFloat(5.0)
+            let textPadding = CGFloat(-50.0)
             let textOffset = sqrt(xOffset * xOffset + yOffset * yOffset) + textPadding
             let textCenter = CGPoint(x: cos(-baseRad) * textOffset + endPoint.x,
                                      y: sin(-baseRad) * textOffset + endPoint.y)
